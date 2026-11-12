@@ -4,9 +4,14 @@ import { pool, waitForDatabase } from './config/db.js'
 import { migrate } from './db/migrate.js'
 import { seedIfEmpty } from './db/seed.js'
 import { startDemoSimulator } from './db/simulator.js'
+import { RESET_CONFIRMATION, resetDatabase } from './db/reset.js'
 
 async function prepareDatabase() {
   await waitForDatabase()
+  if (process.env.RESET_DATABASE_ON_BOOT === RESET_CONFIRMATION) {
+    console.warn('[db] RESET_DATABASE_ON_BOOT is set: rebuilding all data. Remove this variable after this deploy.')
+    await resetDatabase()
+  }
   if (env.autoMigrate) {
     await migrate()
     console.log('[db] Schema is up to date')
