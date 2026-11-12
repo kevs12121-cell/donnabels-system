@@ -22,7 +22,7 @@ app.disable('x-powered-by')
 app.use(cors({ origin: env.clientOrigins }))
 app.use(express.json({ limit: '1mb' }))
 
-app.get('/api/health', (req, res) => success(res, { message: 'Donz Flower Shop API is running' }))
+app.get('/api/health', (req, res) => success(res, { message: 'Donz Flower Shop API is running', demo: env.demoMode }))
 app.get('/api/health/database', asyncHandler(async (req, res) => success(res, { connected: await checkDatabase() })))
 app.use('/api/auth', authRoutes)
 app.get('/api/dashboard/summary', authenticateToken, asyncHandler(summary))

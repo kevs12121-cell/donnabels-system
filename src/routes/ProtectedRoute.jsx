@@ -4,6 +4,11 @@ import { useAuth } from '../context/AuthContext'
 export default function ProtectedRoute() {
   const { user, loading } = useAuth()
   const location = useLocation()
-  if (loading) return <div className="screen-loader">Restoring secure session...</div>
+  if (loading) return <div className="screen-loader"><span className="brand-mark small" />Restoring your session…</div>
   return user ? <Outlet /> : <Navigate to="/login" replace state={{ from: location }} />
+}
+
+export function OwnerRoute() {
+  const { isOwner } = useAuth()
+  return isOwner ? <Outlet /> : <Navigate to="/dashboard" replace />
 }

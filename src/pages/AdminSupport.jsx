@@ -1,13 +1,136 @@
 import { useEffect, useState } from 'react'
-import { ChevronLeft, ChevronRight, Save, Search } from 'lucide-react'
-import api from '../services/api'
+import { KeyRound, Store, UserRound } from 'lucide-react'
+import api, { errorMessage } from '../services/api'
+import { useAuth } from '../context/AuthContext'
+import { useDebounced, useLoader } from '../hooks/useLoader'
+import { DataTable, Field, Notice, PageHeader, Pagination, SearchInput, StatusBadge } from '../components/ui'
+import { formatDateTime, localDate, roleLabel, shiftDays, titleCase } from '../utils/format'
 
-export function ActivityLogs() { const [data, setData] = useState({ rows: [], pagination: {} }); const [page, setPage] = useState(1); const [query, setQuery] = useState(''); const [error, setError] = useState('')
-  useEffect(() => { api.get('/admin/activity-logs', { params: { page, limit: 20, action: query || undefined } }).then(({ data: response }) => setData(response.data)).catch((err) => setError(err.response?.data?.message || 'Unable to load activity logs.')) }, [page, query])
-  return <div><div className="module-heading"><div><p className="kicker">AUDIT / READ ONLY</p><h2>Activity Logs</h2><p>A chronological record of important system actions.</p></div></div>{error && <div className="notice">{error}</div>}<section className="table-panel"><div className="toolbar"><div className="search-box"><Search size={16} /><input placeholder="Filter by action, e.g. COMPLETED" value={query} onChange={(e) => { setPage(1); setQuery(e.target.value) }} /></div><span className="result-count">{data.pagination.total || 0} events</span></div><div className="table-scroll"><table><thead><tr><th>Date / time</th><th>User</th><th>Action</th><th>Module</th><th>Description</th></tr></thead><tbody>{data.rows.map((row) => <tr key={row.id}><td>{row.created_at}</td><td>{row.user_name || row.username || 'System'}</td><td><span className="status-badge active">{row.action}</span></td><td>{row.module}</td><td>{row.description}</td></tr>)}</tbody></table>{!data.rows.length && <div className="empty-state">No activity recorded.</div>}</div><div className="pagination"><button disabled={page <= 1} onClick={() => setPage(page - 1)}><ChevronLeft size={15} /> Previous</button><span>Page {page} of {data.pagination.pages || 1}</span><button disabled={page >= (data.pagination.pages || 1)} onClick={() => setPage(page + 1)}>Next <ChevronRight size={15} /></button></div></section></div> }
+const ACTION_TONES = { VOIDED: 'VOIDED', CANCELLED: 'CANCELLED', DEACTIVATED: 'INACTIVE', LOGIN: 'EMPLOYEE', LOGOUT: 'INACTIVE' }
 
-export function Settings() { const [form, setForm] = useState({ shop_name: 'Donz Flower Shop', currency: 'PHP', date_format: 'YYYY-MM-DD', address: '', phone: '', email: '' }); const [password, setPassword] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' }); const [message, setMessage] = useState(''); const [error, setError] = useState('')
-  useEffect(() => { api.get('/admin/settings').then(({ data }) => setForm((current) => ({ ...current, ...data.data }))).catch(() => {}) }, [])
-  async function saveSettings(event) { event.preventDefault(); try { await api.put('/admin/settings', form); setMessage('Settings saved.'); setError('') } catch (err) { setError(err.response?.data?.message || 'Unable to save settings.') } }
-  async function changePassword(event) { event.preventDefault(); try { await api.post('/auth/change-password', password); setPassword({ currentPassword: '', newPassword: '', confirmPassword: '' }); setMessage('Password changed successfully.'); setError('') } catch (err) { setError(err.response?.data?.message || 'Unable to change password.') } }
-  return <div><div className="module-heading"><div><p className="kicker">SYSTEM / PREFERENCES</p><h2>Settings</h2><p>Keep shop identity, regional preferences, and account security current.</p></div></div>{(error || message) && <div className={error ? 'notice' : 'success-notice'}>{error || message}</div>}<div className="settings-grid"><form className="settings-panel" onSubmit={saveSettings}><div className="panel-heading"><div><p className="kicker">BUSINESS INFORMATION</p><h3>Shop profile</h3></div><Save size={17} color="#78927a" /></div><div className="form-grid"><label>Shop name<input required value={form.shop_name || ''} onChange={(e) => setForm({ ...form, shop_name: e.target.value })} /></label><label>Currency<select value={form.currency || 'PHP'} onChange={(e) => setForm({ ...form, currency: e.target.value })}><option>PHP</option></select></label><label className="wide">Address<textarea value={form.address || ''} onChange={(e) => setForm({ ...form, address: e.target.value })} /></label><label>Phone<input value={form.phone || ''} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></label><label>Email<input type="email" value={form.email || ''} onChange={(e) => setForm({ ...form, email: e.target.value })} /></label></div><button className="primary-btn" type="submit">Save preferences <span>→</span></button></form><form className="settings-panel" onSubmit={changePassword}><div className="panel-heading"><div><p className="kicker">ACCOUNT SECURITY</p><h3>Change password</h3></div></div><p className="form-hint">Use at least 8 characters. Your current password is never displayed or stored.</p><div className="settings-stack"><label>Current password<input required type="password" value={password.currentPassword} onChange={(e) => setPassword({ ...password, currentPassword: e.target.value })} /></label><label>New password<input required minLength="8" type="password" value={password.newPassword} onChange={(e) => setPassword({ ...password, newPassword: e.target.value })} /></label><label>Confirm new password<input required minLength="8" type="password" value={password.confirmPassword} onChange={(e) => setPassword({ ...password, confirmPassword: e.target.value })} /></label></div><button className="primary-btn" type="submit">Change password <span>→</span></button></form></div></div> }
+export function ActivityLogs() {
+  const [query, setQuery] = useState('')
+  const [module, setModule] = useState('')
+  const [days, setDays] = useState('7')
+  const [page, setPage] = useState(1)
+  const search = useDebounced(query)
+  const startDate = days ? localDate(shiftDays(-(Number(days) - 1))) : undefined
+  const { data, loading, error } = useLoader(
+    async () => (await api.get('/admin/activity-logs', { params: { page, limit: 25, search: search || undefined, module: module || undefined, startDate } })).data.data,
+    [page, search, module, days],
+    { rows: [], modules: [], pagination: {} },
+  )
+  const reset = (setter) => (value) => { setter(value); setPage(1) }
+
+  const columns = [
+    { key: 'description', label: 'Event', primary: true, render: (row) => <><strong>{row.description}</strong><small>{formatDateTime(row.created_at)}</small></> },
+    { key: 'user', label: 'User', render: (row) => <span className="cell-stack"><span>{row.user_name || row.username || 'System'}</span><small>{row.role ? roleLabel(row.role) : ''}</small></span> },
+    { key: 'action', label: 'Action', render: (row) => <StatusBadge status={ACTION_TONES[row.action] || 'ACTIVE'} label={titleCase(row.action)} /> },
+    { key: 'module', label: 'Module', render: (row) => titleCase(row.module) },
+    { key: 'ip', label: 'IP address', hideOnMobile: true, render: (row) => <code>{row.ip_address || '—'}</code> },
+  ]
+
+  return (
+    <div>
+      <PageHeader kicker="Audit trail" title="Activity logs" description="A read-only, chronological record of sign-ins and every important change in the system." />
+      <Notice>{error}</Notice>
+      <section className="panel panel-flush">
+        <div className="toolbar">
+          <SearchInput value={query} onChange={reset(setQuery)} placeholder="Search events, users or codes" />
+          <select value={module} onChange={(event) => reset(setModule)(event.target.value)} aria-label="Module"><option value="">All modules</option>{data.modules.map((item) => <option key={item} value={item}>{titleCase(item)}</option>)}</select>
+          <select value={days} onChange={(event) => reset(setDays)(event.target.value)} aria-label="Period"><option value="1">Today</option><option value="7">Last 7 days</option><option value="30">Last 30 days</option><option value="">All time</option></select>
+        </div>
+        <DataTable columns={columns} rows={data.rows} loading={loading} caption="Activity logs" />
+        <Pagination page={data.pagination.page || 1} pages={data.pagination.pages || 1} total={data.pagination.total} onChange={setPage} noun="events" />
+      </section>
+    </div>
+  )
+}
+
+const SHOP_FIELDS = [['shop_name', 'Shop name', true], ['phone', 'Phone'], ['email', 'Email', false, 'email'], ['address', 'Address', false, 'textarea'], ['receipt_footer', 'Receipt footer message', false, 'textarea']]
+
+export function Settings() {
+  const { user, isOwner } = useAuth()
+  const [shop, setShop] = useState({})
+  const [shopState, setShopState] = useState({ busy: false, message: '', error: '' })
+  const [password, setPassword] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' })
+  const [passwordState, setPasswordState] = useState({ busy: false, message: '', error: '' })
+
+  useEffect(() => {
+    api.get('/admin/settings').then(({ data }) => setShop(data.data)).catch((err) => setShopState((state) => ({ ...state, error: errorMessage(err) })))
+  }, [])
+
+  async function saveShop(event) {
+    event.preventDefault()
+    setShopState({ busy: true, message: '', error: '' })
+    try {
+      const payload = Object.fromEntries(SHOP_FIELDS.map(([key]) => [key, shop[key] ?? '']))
+      await api.put('/admin/settings', payload)
+      setShopState({ busy: false, message: 'Shop profile saved. Receipts will use the new details.', error: '' })
+    } catch (err) {
+      setShopState({ busy: false, message: '', error: errorMessage(err, 'Unable to save settings.') })
+    }
+  }
+
+  async function changePassword(event) {
+    event.preventDefault()
+    if (password.newPassword !== password.confirmPassword) {
+      setPasswordState({ busy: false, message: '', error: 'New passwords do not match.' })
+      return
+    }
+    setPasswordState({ busy: true, message: '', error: '' })
+    try {
+      await api.post('/auth/change-password', password)
+      setPassword({ currentPassword: '', newPassword: '', confirmPassword: '' })
+      setPasswordState({ busy: false, message: 'Password changed. Use it the next time you sign in.', error: '' })
+    } catch (err) {
+      setPasswordState({ busy: false, message: '', error: errorMessage(err, 'Unable to change password.') })
+    }
+  }
+
+  return (
+    <div>
+      <PageHeader kicker="Preferences" title="Settings" description={isOwner ? 'Shop details used on receipts, and your account security.' : 'Your account details and password. Shop details are managed by the owner.'} />
+      <div className="settings-grid">
+        <form className="panel" onSubmit={saveShop}>
+          <div className="panel-header"><div><p className="kicker">Business information</p><h3>Shop profile</h3></div><Store size={18} className="panel-icon" aria-hidden="true" /></div>
+          <fieldset disabled={!isOwner} className="form-grid">
+            {SHOP_FIELDS.map(([key, label, required, type]) => (
+              <Field key={key} label={label} wide={type === 'textarea' || key === 'shop_name'}>
+                {type === 'textarea'
+                  ? <textarea rows={2} value={shop[key] || ''} onChange={(event) => setShop({ ...shop, [key]: event.target.value })} />
+                  : <input type={type || 'text'} required={required} value={shop[key] || ''} onChange={(event) => setShop({ ...shop, [key]: event.target.value })} />}
+              </Field>
+            ))}
+          </fieldset>
+          {shopState.message && <Notice type="success">{shopState.message}</Notice>}
+          <Notice>{shopState.error}</Notice>
+          {isOwner ? <div className="form-actions"><button type="submit" className="btn btn-primary" disabled={shopState.busy}>{shopState.busy ? 'Saving…' : 'Save shop profile'}</button></div> : <p className="field-hint">Only the owner can edit the shop profile.</p>}
+        </form>
+
+        <div className="stack">
+          <section className="panel">
+            <div className="panel-header"><div><p className="kicker">Signed in as</p><h3>My account</h3></div><UserRound size={18} className="panel-icon" aria-hidden="true" /></div>
+            <dl className="detail-grid">
+              <div><dt>Name</dt><dd>{user?.firstName} {user?.lastName}</dd></div>
+              <div><dt>Username</dt><dd>{user?.username}</dd></div>
+              <div><dt>Role</dt><dd><StatusBadge status={user?.role} /></dd></div>
+              <div><dt>Position</dt><dd>{user?.position || '—'}</dd></div>
+            </dl>
+          </section>
+          <form className="panel" onSubmit={changePassword}>
+            <div className="panel-header"><div><p className="kicker">Account security</p><h3>Change password</h3></div><KeyRound size={18} className="panel-icon" aria-hidden="true" /></div>
+            <div className="stack">
+              <Field label="Current password"><input required type="password" autoComplete="current-password" value={password.currentPassword} onChange={(event) => setPassword({ ...password, currentPassword: event.target.value })} /></Field>
+              <Field label="New password" hint="At least 8 characters."><input required minLength={8} type="password" autoComplete="new-password" value={password.newPassword} onChange={(event) => setPassword({ ...password, newPassword: event.target.value })} /></Field>
+              <Field label="Confirm new password"><input required minLength={8} type="password" autoComplete="new-password" value={password.confirmPassword} onChange={(event) => setPassword({ ...password, confirmPassword: event.target.value })} /></Field>
+            </div>
+            {passwordState.message && <Notice type="success">{passwordState.message}</Notice>}
+            <Notice>{passwordState.error}</Notice>
+            <div className="form-actions"><button type="submit" className="btn btn-primary" disabled={passwordState.busy}>{passwordState.busy ? 'Updating…' : 'Change password'}</button></div>
+          </form>
+        </div>
+      </div>
+    </div>
+  )
+}
