@@ -26,7 +26,7 @@ export async function resetDatabase() {
   console.log('[reset] Database rebuilt with fresh sample data')
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   if (!process.argv.includes('--confirm')) {
     console.error('This permanently deletes ALL shop data. Re-run with --confirm to proceed: npm run db:reset -- --confirm')
     process.exit(1)
