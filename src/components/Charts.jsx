@@ -45,14 +45,18 @@ export function SalesTrendChart({ data = [] }) {
                 <span className="trend-bar-area">
                   {showLabel && <span className="trend-value" style={{ bottom: `calc(${height}% + 6px)` }}>{compactMoney(day.total)}</span>}
                   <span className={`trend-bar ${isToday ? 'is-today' : ''}`} style={{ height: `${Math.max(height, day.total > 0 ? 1.5 : 0)}%` }} />
+                  {active === index && (
+                    <span
+                      className={`chart-tooltip ${index > lastIndex - 2 ? 'align-right' : index < 2 ? 'align-left' : ''}`}
+                      style={{ bottom: `min(calc(${height}% + 10px), calc(100% - 54px))` }}
+                      role="tooltip"
+                    >
+                      <strong>{money(day.total)}</strong>
+                      <span>{day.transactions} sales · {formatDate(day.sale_date)}</span>
+                    </span>
+                  )}
                 </span>
                 <span className={`trend-label ${isToday ? 'is-today' : ''}`}>{isToday ? 'Today' : weekday(day.sale_date)}</span>
-                {active === index && (
-                  <span className={`chart-tooltip ${index > lastIndex - 2 ? 'align-right' : index < 2 ? 'align-left' : ''}`} role="tooltip">
-                    <strong>{money(day.total)}</strong>
-                    <span>{day.transactions} sales · {formatDate(day.sale_date)}</span>
-                  </span>
-                )}
               </button>
             )
           })}

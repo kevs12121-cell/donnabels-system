@@ -281,7 +281,7 @@ fieldset { margin: 0; padding: 0; border: 0; min-width: 0; }
 .trend-value { position: absolute; color: var(--ink); font-size: 11.5px; font-weight: 700; white-space: nowrap; }
 .trend-label { height: 26px; padding-top: 6px; color: var(--muted); font-size: 11.5px; font-weight: 600; }
 .trend-label.is-today { color: var(--ink); font-weight: 800; }
-.chart-tooltip { position: absolute; bottom: calc(100% - 20px); left: 50%; z-index: 5; display: grid; gap: 1px; min-width: 150px; padding: 8px 11px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); box-shadow: var(--shadow-md); text-align: left; transform: translateX(-50%); pointer-events: none; }
+.chart-tooltip { position: absolute; left: 50%; z-index: 5; display: grid; gap: 1px; min-width: 150px; padding: 8px 11px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); box-shadow: var(--shadow-md); text-align: left; transform: translateX(-50%); pointer-events: none; }
 .chart-tooltip.align-right { left: auto; right: 0; transform: none; }
 .chart-tooltip.align-left { left: 0; transform: none; }
 .chart-tooltip strong { font-size: 14px; }

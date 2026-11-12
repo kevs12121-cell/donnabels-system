@@ -12,6 +12,7 @@
     "server": "node server/server.js",
     "server:dev": "node --watch server/server.js",
     "start": "node server/server.js",
+    "db:reset": "node server/db/reset.js",
     "build": "vite build",
     "lint": "oxlint",
     "preview": "vite preview"
