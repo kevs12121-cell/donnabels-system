@@ -1,103 +1,101 @@
 # DONZ Flower Shop Management System
 
-Internal operations software for Donz Flower Shop. This is an owner/employee management system only; it contains no customer portal, shopping cart, online ordering, or customer payment flow.
-
-## Part 1 Foundation
-
-Part 1 established the React/Vite frontend, Express REST API, MySQL schema, JWT authentication, role authorization, activity logging foundation, dashboard shell, and protected module routes. Part 2 added the daily operations layer: product and supplier management, inventory adjustments, purchases and receiving, internal POS sales, payments, sale voiding, and expenses. Part 3 adds owner reporting, dashboard analytics, CSV/print actions, employee and user administration, activity-log viewing, settings, and password changes.
+Internal operations software for Donz Flower Shop: point of sale, inventory, supplier purchasing, expenses, reports, staff and audit logs. It is an owner/cashier system only — there is no customer portal or online ordering.
 
 ## Stack
 
-- Frontend: React 19, Vite, React Router, Axios, responsive CSS
-- Backend: Node.js, Express, JWT, bcryptjs, centralized error handling
-- Database: MySQL 8.x with InnoDB and foreign keys
-
-## Structure
+- **Frontend:** React 19, Vite, React Router, Axios, responsive CSS (phones, tablets, desktop)
+- **Backend:** Node.js 22+, Express 5, JWT auth, bcrypt, centralized error handling
+- **Database:** MySQL 8 (InnoDB, foreign keys, transactions with row locks)
 
 ```text
-src/            React frontend (context, layouts, pages, routes, services)
-server/         Express API (config, controllers, middleware, routes, services)
-database/       MySQL schema and development seed SQL
+src/            React app (components, context, hooks, layouts, pages, services, utils)
+server/         Express API (config, controllers, db, middleware, routes, services, utils)
+database/       MySQL schema (01_schema.sql) and legacy seed SQL
 ```
 
-## Environment
+In production Express serves both the API (`/api/*`) and the built React app from one origin.
 
-Copy `.env.example` to `.env` and set local MySQL values:
+## Roles
 
-```env
-DB_HOST=localhost
-DB_PORT=3306
-DB_USER=root
-DB_PASSWORD=
-DB_NAME=donnasFlowerShop
-PORT=5004
-JWT_SECRET=replace_with_a_long_local_secret
-CLIENT_ORIGIN=http://localhost:5177
-```
+| Area | Owner | Cashier |
+| --- | --- | --- |
+| Dashboard | Shop-wide KPIs | "My sales today" + shop KPIs |
+| Sales & POS | Sell, view history, **void sales** | Sell, view history, reprint receipts |
+| Inventory | View, adjust, movement history | View, adjust, movement history |
+| Purchases | Create, receive, **cancel** | Create, receive |
+| Expenses | Record, **edit, void/restore** | Record |
+| Products, categories, suppliers | **Create, edit, (de)activate** | View only |
+| Reports, employees, user accounts, activity logs | Yes | — |
+| Settings | Shop profile + own password | Own password (shop profile read-only) |
 
-Production secrets must never be committed.
+## Sample accounts
 
-## Install and Run
+Seeded automatically into an empty database (change these before real use):
+
+| Role | Username | Password |
+| --- | --- | --- |
+| Owner | `owner` | `password` |
+| Cashier | `cashier` | `password` |
+| Cashier | `lina` | `password` |
+
+Set `OWNER_PASSWORD` / `CASHIER_PASSWORD` before the first boot to seed different passwords.
+
+## Run locally
 
 ```bash
+cp .env.example .env      # then fill in your MySQL credentials
 npm install
-npm run dev
+npm run dev               # API on :5004, app on http://localhost:5177 (Vite proxies /api)
 ```
 
-`npm run dev` starts both services together.
+On startup the server creates any missing tables (`AUTO_MIGRATE`) and, **if the `users` table is empty**, seeds accounts, catalog, suppliers and ~90 days of realistic, stock-consistent history (`SEED_DEMO_DATA`).
 
-Frontend: `http://localhost:5177`  
-API: `http://localhost:5004/api`
-
-Use `npm run server:dev` for automatic backend restarts.
-
-## Initialize MySQL
-
-Run the files in order against MySQL 8.x:
+To rebuild a database with fresh sample data (this **deletes all data**):
 
 ```bash
-mysql -u root -p < database/01_schema.sql
-mysql -u root -p donnasFlowerShop < database/02_seed_data.sql
+npm run db:reset -- --confirm
 ```
 
-The schema creates the isolated `donnasFlowerShop` database and these tables: `employees`, `users`, `categories`, `products`, `suppliers`, `inventory_transactions`, `purchases`, `purchase_items`, `sales`, `sale_items`, `payments`, `expenses`, `activity_logs`, and `settings`.
+## Configuration
 
-## Development Accounts
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `DATABASE_URL` | — | `mysql://user:pass@host:3306/db` (Railway: `${{MySQL.MYSQL_URL}}`). Otherwise `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` (Railway `MYSQL*` vars also work) |
+| `JWT_SECRET` | dev value | **Required in production** — long random string |
+| `TZ` | `Asia/Manila` | Business timezone for "today", reports and receipts |
+| `AUTO_MIGRATE` | `true` | Create tables on boot |
+| `SEED_DEMO_DATA` | `true` | Seed an empty database with sample history |
+| `DEMO_MODE` | `false` | Keep simulating shop activity every hour so a demo never looks stale, and show demo-account shortcuts on the login page. **Never enable on a real shop database.** |
+| `RESET_DATABASE_ON_BOOT` | — | Set to `yes-delete-everything` for **one** deploy to rebuild sample data, then remove it |
+| `CLIENT_ORIGIN` | `http://localhost:5177` | Comma-separated origins allowed by CORS (only needed if the app is served from another domain) |
 
-The seed uses a bcrypt hash for development password `password`:
+## Deploy on Railway
 
-- Owner: `owner` / `password`
-- Employee: `mara` / `password`
-- Employee: `lina` / `password`
-
-Change or remove these development accounts before deployment.
-
-## API Foundation
-
-- `GET /api/health`
-- `GET /api/health/database`
-- `POST /api/auth/login`
-- `GET /api/auth/me`
-- `POST /api/auth/logout`
-- `GET /api/dashboard/summary`
-- CRUD foundation for `/api/products`, `/api/categories`, `/api/suppliers`, and `/api/employees`
-- `GET /api/inventory`, `GET /api/inventory/low-stock`, `GET /api/inventory/:productId`, `POST /api/inventory/adjust`
-- `GET /api/purchases`, `GET /api/purchases/:id`, `POST /api/purchases`, `POST /api/purchases/:id/receive`, `POST /api/purchases/:id/cancel`
-- `GET /api/sales`, `GET /api/sales/:id`, `POST /api/sales`, `POST /api/sales/:id/void`
-- `GET /api/expenses`, `POST /api/expenses`, `PUT /api/expenses/:id`, `PATCH /api/expenses/:id/status`
-- `GET /api/dashboard/details`
-- Owner-only reports: `/api/reports/sales`, `/api/reports/inventory`, `/api/reports/inventory-movements`, `/api/reports/purchases`, `/api/reports/expenses`, `/api/reports/profit-summary`
-- Owner-only administration: `/api/admin/users`, `/api/admin/activity-logs`; settings at `/api/admin/settings`
-- `POST /api/auth/change-password`
-- Status updates at `PATCH /api/{resource}/:id/status`
-
-Resource endpoints require a JWT. Product, category, supplier, and employee writes require owner authorization; operational sales, purchases, and adjustments are available to owner and employee roles; purchase cancellation, sale voiding, and expense editing are owner-only. Password hashes are never returned. Sales, purchase receiving, stock adjustments, and sale voiding use SQL transactions and row locks.
+1. Create a project with a **MySQL** database and a service from this repository.
+2. On the app service set `DATABASE_URL=${{MySQL.MYSQL_URL}}`, `JWT_SECRET=<random>`, `NODE_ENV=production`, `TZ=Asia/Manila` (and `DEMO_MODE=true` for a demo).
+3. Railway builds with `npm run build` and starts with `npm start`; tables and sample data are created on first boot.
+4. Generate a public domain under the service's *Networking* settings.
 
 ## Checks
 
 ```bash
-npm run build
 npm run lint
+npm run build
 ```
 
-Database health, authentication, and transaction checks require a running MySQL instance configured through `.env`. MySQL live integration was not available in this environment: the `mysql` client was not installed, so schema execution and end-to-end database checks remain to be run locally.
+Health endpoints: `GET /api/health` and `GET /api/health/database`.
+
+## API overview
+
+- Auth: `POST /api/auth/login`, `GET /api/auth/me`, `POST /api/auth/logout`, `POST /api/auth/change-password`
+- Dashboard: `GET /api/dashboard/summary`, `GET /api/dashboard/details`
+- Master data: `/api/products`, `/api/categories`, `/api/suppliers`, `/api/employees` (GET list/one, POST, PUT `/:id`, PATCH `/:id/status`)
+- Inventory: `GET /api/inventory`, `GET /api/inventory/low-stock`, `GET /api/inventory/:productId`, `POST /api/inventory/adjust`
+- Purchases: `GET/POST /api/purchases`, `GET /api/purchases/:id`, `POST /api/purchases/:id/receive`, `POST /api/purchases/:id/cancel`
+- Sales: `GET /api/sales` (filters + pagination), `GET /api/sales/:id`, `POST /api/sales`, `POST /api/sales/:id/void`
+- Expenses: `GET/POST /api/expenses`, `PUT /api/expenses/:id`, `PATCH /api/expenses/:id/status`
+- Reports (owner): `/api/reports/sales`, `/inventory`, `/inventory-movements`, `/purchases`, `/expenses`, `/profit-summary`
+- Admin (owner): `/api/admin/users`, `/api/admin/activity-logs`; settings at `/api/admin/settings`
+
+Sales, receiving, adjustments and voids run in SQL transactions with row locks; password hashes are never returned; deactivating a user or employee takes effect on their next request.
